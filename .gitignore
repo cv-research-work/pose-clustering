@@ -1,0 +1,6 @@
+cluster_images
+pose_images
+data_old
+kmeans_clusters
+__pycache__/
+.DS_Store
