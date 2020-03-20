@@ -22,7 +22,9 @@ DEFAULT_MAX_ITERATIONS_KMEANS = 100
 DEFAULT_MAX_TOLERANCE = 0.0001
 
 
-
+## mean shift
+DEFAULT_KERNEL_BANDWIDTH=0.5
+DEFAULT_THRESHOLD = 0.001
 def compute_distance(center,keypt):
     z1 = np.array([[(c[0],c[1]) for c in center]])
     z2 = np.array([[(c[0],c[1]) for c in keypt]])
@@ -35,7 +37,7 @@ def compute_distance(center,keypt):
 """
 Basic clustering method, grps similar pose images into one cluster based on min distance, find large grps and update cluster centers
 """
-def cluster_basic(keypoints):
+def cluster_basic(keypoints,save_folder):
     centers = {}
     grps ={}
 
@@ -109,16 +111,16 @@ def cluster_basic(keypoints):
     realigned_points = update_centers(grps_with_large_cnts,keypoints)
     
     ## save results:
-    if not os.path.exists("pose_images"):
+    if not os.path.exists(f"{save_folder}"):
         os.makedirs("pose_images")
     for k, v in realigned_points.items():
-        if not os.path.exists(os.path.join("pose_images",str(k))):
-            os.makedirs(os.path.join("pose_images",str(k)))
+        if not os.path.exists(os.path.join(f"{save_folder}",str(k))):
+            os.makedirs(os.path.join(f"{save_folder}",str(k)))
         
         imgs, center = v[0],v[1]
         for index in imgs:
             img_path = images[index]
-            shutil.copyfile(img_path,os.path.join("pose_images",str(k),os.path.basename(img_path)))
+            shutil.copyfile(img_path,os.path.join(f"{save_folder}",str(k),os.path.basename(img_path)))
 
     return 
 
@@ -209,6 +211,76 @@ def compute_sse(k, data,clustering, centers):
     print("%4f"%(sse))
     return sse
 
+"""
+Mean shift  = shift points and cluster
+"""
+def mean_shift(keypoints,kernel_bandwidth=DEFAULT_KERNEL_BANDWIDTH):
+    guassian_kernel = lambda distance, band_width:  (1 / (band_width * np.sqrt(2 * np.pi))) * np.exp(-0.5 * ((distance / band_width)) ** 2)
+    kernel = guassian_kernel
+
+    def shift(point, all_keypoints, kernel_bandwidth):
+        shift_xy = {}
+        weights = {}
+
+        for i, kpt in enumerate(keypoints):
+            distance = compute_distance(point,kpt)
+            weight = guassian_kernel(distance,kernel_bandwidth)
+
+            for o in range(len(kpt)):
+                x , y = kpt[o][0],kpt[o][1]
+                if o not in shift_xy:
+                    shift_xy[o] = []
+                    shift_xy[o].append((x * weight))
+                    shift_xy[o].append((y * weight))
+                else:
+                    shift_xy[o][0] = shift_xy[o][0] + (x * weight)
+                    shift_xy[o][1] = shift_xy[o][1] + (y * weight)
+                
+                if o not in weights:
+                    weights[o] =  0.0
+               
+                weights[o] = weights[o] + weight
+
+                
+        
+        ## compute avg shift
+        new_point = np.array([[shift_xy[i][0]/weights[i],shift_xy[i][1]/weights[i]] for i in range(len(weights))])
+        
+        return np.array(new_point)
+            
+    
+
+    #shift points
+    shift_keypoints = np.array(keypoints)
+    n = shift_keypoints.shape[0]
+
+    ##
+    shifting = [True] * keypoints.shape[0]
+    
+    ## mean shift points
+    while True:
+        max_distance = 0
+        for i in range(n):
+            if not shifting[i]:
+                continue
+            ## point is shifted, 
+            p_shift_init = shift_keypoints[i].copy()
+            shift_keypoints[i] = shift(shift_keypoints[i],keypoints,kernel_bandwidth)
+
+            ## compute distance between original point and shifted point
+            dist = compute_distance(shift_keypoints[i], p_shift_init)
+            max_distance = max(max_distance,dist)
+
+            ## shift or not shift
+            shifting[i] = dist > DEFAULT_THRESHOLD
+
+        print(max_distance)
+        if max_distance < DEFAULT_THRESHOLD:
+            break
+
+    return shift_keypoints
+
+
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--pickle_file",default="pickles/image_data_normalized.p")
@@ -223,10 +295,15 @@ if __name__=="__main__":
     keypoints = keypoints.reshape(keypoints.shape[0],20,2)
     
     if cluster == "basic":
-        cluster_basic(keypoints)
+        save_path = "pose_images"
+        cluster_basic(keypoints,save_path)
     elif cluster == "kmeans":
         grps, centers = cluster_kmeans(keypoints,DEFAULT_K_VALUE)
         #sse = compute_sse(k, keypoints,grps, centers)
+    elif cluster == "mean_shift":
+        save_path = "mean_shift_images"
+        new_points = mean_shift(keypoints)
+        cluster_basic(new_points,save_path)
     else:
         print(f"Clustering algorithm not implemented")
         exit()
