@@ -11,10 +11,11 @@ from scipy.spatial.distance import cdist
 
 import matplotlib.pyplot as plt 
 from sklearn.decomposition import PCA
-
-
+import math
+from sklearn.metrics.pairwise import cosine_similarity
+from scipy.spatial.distance import cosine
 ## define constants
-DEFAULT_MAX_SIZE_CLUSTER = 10
+DEFAULT_MAX_SIZE_CLUSTER = 5
 
 ## kmeans
 DEFAULT_K_VALUE = 15
@@ -24,7 +25,7 @@ DEFAULT_MAX_TOLERANCE = 0.0001
 
 ## mean shift
 DEFAULT_KERNEL_BANDWIDTH=0.5
-DEFAULT_THRESHOLD = 0.001
+DEFAULT_THRESHOLD = 0.01
 def compute_distance(center,keypt):
     z1 = np.array([[(c[0],c[1]) for c in center]])
     z2 = np.array([[(c[0],c[1]) for c in keypt]])
@@ -33,7 +34,14 @@ def compute_distance(center,keypt):
     distance =  sum(np.linalg.norm(x-y) for x, y in zip(z1, z2))
     return distance
 
-
+def compute_distance_cosine(center, keypt):
+    distance = 0
+    for i in range(len(center)):
+        center_x,center_y = center[i][0],center[i][1]
+        keypt_x,keypt_y = keypt[i][0],keypt[i][1]
+        distance += 2 * cosine([center_x,center_y],[keypt_x,keypt_y])
+    
+    return math.sqrt(distance)
 """
 Basic clustering method, grps similar pose images into one cluster based on min distance, find large grps and update cluster centers
 """
@@ -111,8 +119,11 @@ def cluster_basic(keypoints,save_folder):
     realigned_points = update_centers(grps_with_large_cnts,keypoints)
     
     ## save results:
-    if not os.path.exists(f"{save_folder}"):
-        os.makedirs("pose_images")
+    if os.path.exists(f"{save_folder}"):
+        shutil.rmtree(f"{save_folder}", ignore_errors=False, onerror=None)
+   
+    os.makedirs(f"{save_folder}")
+
     for k, v in realigned_points.items():
         if not os.path.exists(os.path.join(f"{save_folder}",str(k))):
             os.makedirs(os.path.join(f"{save_folder}",str(k)))
@@ -131,8 +142,8 @@ Takes n keypoints as input, use default k value (specifies how many clusters are
 data points to centroid
 
 """
-def cluster_kmeans(keypoints, k,dist = np.mean):
-
+def cluster_kmeans(keypoints, k,save_folder):
+    dist = np.mean
     n = len(keypoints)
     
     ## set seed:
@@ -184,18 +195,25 @@ def cluster_kmeans(keypoints, k,dist = np.mean):
     #plt.scatter(eigenvectors[:, 0], eigenvectors[:, 1], c=nearest_clusters,s=50, cmap='viridis');
     #plt.show()
 
+    if os.path.exists(f"{save_folder}"):
+        shutil.rmtree(f"{save_folder}", ignore_errors=False, onerror=None)
+   
+    os.makedirs(f"{save_folder}")
+
+
     for k in range(DEFAULT_K_VALUE):
         
         indexs = [i for i, o in enumerate(new_centers) if o==k]
         
         ## save results:
-        if not os.path.exists(f"kmeans_clusters/{str(k)}"):
-            os.makedirs(f"kmeans_clusters/{str(k)}")
+        if not os.path.exists(f"{save_folder}/{str(k)}"):
+            os.makedirs(f"{save_folder}/{str(k)}")
+
+        
         for v in indexs:
             v = int(v)
             img_path = images[v]
-            shutil.copyfile(img_path,os.path.join("kmeans_clusters",str(k),os.path.basename(img_path)))
-
+            shutil.copyfile(img_path,os.path.join(f"{save_folder}",str(k),os.path.basename(img_path)))
 
     return new_centers, clusters
 
@@ -285,6 +303,7 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--pickle_file",default="pickles/image_data_normalized.p")
     parser.add_argument("--cluster",default="basic")
+    parser.add_argument("--save_folder",default="save_results")
 
     args = parser.parse_args()
     pickle_file = args.pickle_file
@@ -295,13 +314,14 @@ if __name__=="__main__":
     keypoints = keypoints.reshape(keypoints.shape[0],20,2)
     
     if cluster == "basic":
-        save_path = "pose_images"
+        save_path = args.save_folder
         cluster_basic(keypoints,save_path)
+
     elif cluster == "kmeans":
-        grps, centers = cluster_kmeans(keypoints,DEFAULT_K_VALUE)
+        grps, centers = cluster_kmeans(keypoints,DEFAULT_K_VALUE,args.save_folder)
         #sse = compute_sse(k, keypoints,grps, centers)
     elif cluster == "mean_shift":
-        save_path = "mean_shift_images"
+        save_path = args.save_folder
         new_points = mean_shift(keypoints)
         cluster_basic(new_points,save_path)
     else:

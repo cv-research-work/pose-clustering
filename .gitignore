@@ -5,3 +5,6 @@ kmeans_clusters
 __pycache__/
 .DS_Store
 mean_shift_images
+test_images/
+save_results/
+alphapose_results/

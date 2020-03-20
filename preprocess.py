@@ -19,8 +19,9 @@ import math
 from sklearn.cluster import KMeans, AgglomerativeClustering
 import pdb 
 
-
+import argparse
 import utils
+
 ## use following keypoint labels
 label_names = ["Top of the head",'Highest point on the back',
                 "Left eye","Right eye","Jaw",
@@ -39,9 +40,12 @@ label_names = ["Top of the head",'Highest point on the back',
                 "Base of left tusk",
                 ]
 
+def save_annotations_pickle_file(train_dict, filename=""):
+        f = open(filename,"wb")
+        pickle.dump(train_dict,f,-1)
+        f.close()  
 
-
-def save_keypoints_pickle_file(data_dir):
+def get_artifacts_manual_anno(data_dir):
 
     
     images_list = []
@@ -229,18 +233,65 @@ def save_keypoints_pickle_file(data_dir):
                         images_list.append(os.path.join(data_dir,folder,filename+".JPG"))
                         keypoints_list.append(point_list)
 
-    def save_annotations_pickle_file(train_dict, filename=""):
-        f = open(filename,"wb")
-        pickle.dump(train_dict,f,-1)
-        f.close()  
+    
 
-    pickle_file = "pickles/image_data_normalized.p"
-    save_annotations_pickle_file({"images":images_list,"keypoints":keypoints_list},filename=pickle_file)
-    return pickle_file
+    return (images_list, keypoints_list)
 
+def get_artifacts_alphapose_anno(data_dir,alphapose_test_results_file ):
+    with open(alphapose_test_results_file, errors='ignore') as json_data:
+     data_dict = json.load(json_data, strict=False)
+    
+    DEFAULT_KEYPOINT_SCORE = 0.8
+    images_list = []
+    keypoints_list = []
+    for each in data_dict:
+        bbox = each["bbox"]
+        xmin, ymin, xmax, ymax = bbox[0],bbox[1],bbox[2],bbox[3]
+        image_path = each["image_id"]
+        parts = image_path.split("/")
 
+        filename, ext = os.path.splitext(parts[-1])
+        image_path = os.path.join(data_dir,filename+".png")
+        
+        keypoints = np.array(each["keypoints"]).reshape(20,3)
+        normalize_keypoints = []
+        for kpt in keypoints:
+            x, y, score = kpt[0],kpt[1],kpt[2]
+            if score >= DEFAULT_KEYPOINT_SCORE:
+                new_x = utils.normalize_keypoints(x,xmax,xmin)
+                new_y = utils.normalize_keypoints(y,ymax,ymin)
+                normalize_keypoints.append([new_x,new_y])
+            else:
+                normalize_keypoints.append([0.0,0.0])
+
+        ## append to list
+        images_list.append(image_path)
+        keypoints_list.append(normalize_keypoints)
+
+    return (images_list, keypoints_list)
+                
 if __name__=="__main__":
-    ## build pickle file - images, keypoints
-    data_dir = "/Volumes/My Storage/Elephant Data/DATA"
-    pickle_file = save_keypoints_pickle_file(data_dir)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--anno_type",default="manual")
+    parser.add_argument("--data_dir",default="/Volumes/My Storage/Elephant Data/DATA")
+    parser.add_argument("--alpha_pose_results", default="alphapose_results/test_gt_kpt.json",required=False)
+    parser.add_argument("--pickle_file",default="pickles/image_data_normalized.p")
+    args = parser.parse_args()
+    anno_type = args.anno_type
+    data_dir = args.data_dir
+
+    if anno_type=="manual":
+        ## build pickle file - images, keypoints
+        images_list, keypoints_list = get_artifacts_manual_anno(data_dir)
+    elif anno_type=="alphapose":
+        print("in progress")
+        images_list, keypoints_list = get_artifacts_alphapose_anno(data_dir,args.alpha_pose_results)
+    else:
+        print("Not implemented!")
+        exit()
+
+    pickle_file = args.pickle_file
+    save_annotations_pickle_file({"images":images_list,"keypoints":keypoints_list},filename=pickle_file)
     print(f" Pickle file: {pickle_file}")
+
+
