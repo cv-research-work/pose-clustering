@@ -23,12 +23,16 @@ import argparse
 import utils
 
 ## use following keypoint labels
-label_names = ["Top of the head",'Highest point on the back',
-                "Left eye","Right eye","Jaw",
+label_names = ["Top of the head",
+                'Highest point on the back',
+                "Left eye","Right eye",
+                "Jaw",
                 "Base of trunk",
                 "Left elbow",
                 "Right elbow",
-                "Bottom of the belly","Left knee","Right knee",
+                "Bottom of the belly",
+                "Left knee",
+                "Right knee",
                 "Widest point of left ear",
                 "Widest point of right ear",
                 "Base of tail",
@@ -40,14 +44,21 @@ label_names = ["Top of the head",'Highest point on the back',
                 "Base of left tusk",
                 ]
 
+exclude_label_names = ["Jaw"]
+
+def get_exclude_indexes():
+    indexes = []
+    for e in exclude_label_names:
+        index = label_names.index(e)
+        indexes.append(index)
+    return indexes
+
 def save_annotations_pickle_file(train_dict, filename=""):
         f = open(filename,"wb")
         pickle.dump(train_dict,f,-1)
         f.close()  
 
 def get_artifacts_manual_anno(data_dir):
-
-    
     images_list = []
     keypoints_list = []
 
@@ -220,7 +231,11 @@ def get_artifacts_manual_anno(data_dir):
                             print(label["label"])
 
                     point_list = []
+                    excludes_indexes = get_exclude_indexes()
                     for n in range(len(label_names)):
+                        if n in excludes_indexes:
+                            continue 
+
                         if n in points:
                             point_list.append([points[n][0],points[n][1]])
                         else:
@@ -233,15 +248,19 @@ def get_artifacts_manual_anno(data_dir):
                         images_list.append(os.path.join(data_dir,folder,filename+".JPG"))
                         keypoints_list.append(point_list)
 
-    
-
     return (images_list, keypoints_list)
 
 def get_artifacts_alphapose_anno(data_dir,alphapose_test_results_file ):
+    exclude_index =get_exclude_indexes()
+    exclude_image_ids = ["1003_IMG_2415",
+    "1007_IMG_9873","1020_IMG_5751","1022_IMG_1616",
+    "1022_IMG_2034","1029_IMG_4413","1033_IMG_1161",
+    "1033_IMG_1288","1034_IMG_1960","1002_IMG_9442"]
+
     with open(alphapose_test_results_file, errors='ignore') as json_data:
      data_dict = json.load(json_data, strict=False)
     
-    DEFAULT_KEYPOINT_SCORE = 0.8
+    DEFAULT_KEYPOINT_SCORE = 0.7
     images_list = []
     keypoints_list = []
     for each in data_dict:
@@ -251,11 +270,20 @@ def get_artifacts_alphapose_anno(data_dir,alphapose_test_results_file ):
         parts = image_path.split("/")
 
         filename, ext = os.path.splitext(parts[-1])
+        if filename in exclude_image_ids:
+            continue 
+
+
         image_path = os.path.join(data_dir,filename+".png")
         
         keypoints = np.array(each["keypoints"]).reshape(20,3)
         normalize_keypoints = []
-        for kpt in keypoints:
+        for idx, kpt in enumerate(keypoints):
+            
+            if idx in exclude_index:
+                
+                continue
+            
             x, y, score = kpt[0],kpt[1],kpt[2]
             if score >= DEFAULT_KEYPOINT_SCORE:
                 new_x = utils.normalize_keypoints(x,xmax,xmin)
@@ -266,6 +294,7 @@ def get_artifacts_alphapose_anno(data_dir,alphapose_test_results_file ):
 
         ## append to list
         images_list.append(image_path)
+        print(len(normalize_keypoints))
         keypoints_list.append(normalize_keypoints)
 
     return (images_list, keypoints_list)

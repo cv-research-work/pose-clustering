@@ -8,3 +8,7 @@ mean_shift_images
 test_images/
 save_results/
 alphapose_results/
+save_results_alphapose/
+save_results_alphapose_kmeans/
+save_results_alphapose_mean_shift/
+save_results_manual/

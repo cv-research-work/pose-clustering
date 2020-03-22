@@ -25,8 +25,9 @@ DEFAULT_MAX_TOLERANCE = 0.0001
 
 ## mean shift
 DEFAULT_KERNEL_BANDWIDTH=0.5
-DEFAULT_THRESHOLD = 0.01
+DEFAULT_THRESHOLD = 0.001
 def compute_distance(center,keypt):
+    
     z1 = np.array([[(c[0],c[1]) for c in center]])
     z2 = np.array([[(c[0],c[1]) for c in keypt]])
 
@@ -170,16 +171,18 @@ def cluster_kmeans(keypoints, k,save_folder):
             original = clusters[cluster]
             curr = new_clusters[cluster]
 
-            if not np.all(original==0):
-                if np.sum((curr - original)/original * 100.0) > DEFAULT_MAX_TOLERANCE:
-                    isOptimal = False
+            #if not np.all(original==0):
+             #   if np.sum((curr - original)/original * 100.0) > DEFAULT_MAX_TOLERANCE:
+              #      isOptimal = False
 
-        if isOptimal:
+        #if isOptimal:
+         #   break
+        if np.allclose(previous_centers, new_centers):
             break
 
         previous_centers = new_centers
         clusters = new_clusters
-
+        
 
     #print(f"No of iterations: {i}")
     ## save cluster images
@@ -201,7 +204,7 @@ def cluster_kmeans(keypoints, k,save_folder):
     os.makedirs(f"{save_folder}")
 
 
-    for k in range(DEFAULT_K_VALUE):
+    for k in range(k):
         
         indexs = [i for i, o in enumerate(new_centers) if o==k]
         
@@ -311,7 +314,7 @@ if __name__=="__main__":
     images, keypoints  = load_pickle_file(args.pickle_file)
     keypoints = np.array(keypoints)
     
-    keypoints = keypoints.reshape(keypoints.shape[0],20,2)
+    keypoints = keypoints.reshape(keypoints.shape[0],keypoints.shape[1],2)
     
     if cluster == "basic":
         save_path = args.save_folder
@@ -323,7 +326,7 @@ if __name__=="__main__":
     elif cluster == "mean_shift":
         save_path = args.save_folder
         new_points = mean_shift(keypoints)
-        cluster_basic(new_points,save_path)
+        cluster_kmeans(new_points,6,save_path)
     else:
         print(f"Clustering algorithm not implemented")
         exit()
